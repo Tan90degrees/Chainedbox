@@ -64,7 +64,7 @@ sed -i '/^verbosity/cverbosity=7' $mount_point/boot/armbianEnv.txt && \
 sed -i '/rootfstype=ext4/a rootflags=rw' $mount_point/boot/armbianEnv.txt && \
 echo "extraargs=usbcore.autosuspend=-1" >> $mount_point/boot/armbianEnv.txt && \
 echo "extraboardargs=" >> $mount_point/boot/armbianEnv.txt && \
-echo "fdtfile=rk3328-l1pro-1296mhz.dtb" >> $mount_point/boot/armbianEnv.txt && \
+echo "fdtfile=rk3328-l1pro-1512mhz.dtb" >> $mount_point/boot/armbianEnv.txt && \
 echo "usbstoragequirks=0x05e3:0x0612:u,0x1d6b:0x0003:u,0x05e3:0x0610:u" >> $mount_point/boot/armbianEnv.txt && \
 sed -i 's/0x9000000/0x39000000/' $mount_point/boot/boot.cmd && \
 sed -i 's#${prefix}dtb/${fdtfile}#${prefix}/${fdtfile}#' $mount_point/boot/boot.cmd
@@ -73,14 +73,14 @@ mkimage -C none -T script -d $mount_point/boot/boot.cmd $mount_point/boot/boot.s
 # patch rootfs
 echo "patch rootfs"
 cat > $mount_point/etc/apt/sources.list <<EOF
-deb [arch=arm64,armhf] https://mirrors.tuna.tsinghua.edu.cn/debian/ bullseye main contrib non-free
-deb [arch=arm64,armhf] https://mirrors.tuna.tsinghua.edu.cn/debian/ bullseye-updates main contrib non-free
-deb [arch=arm64,armhf] https://mirrors.tuna.tsinghua.edu.cn/debian/ bullseye-backports main contrib non-free
-deb [arch=arm64,armhf] https://mirrors.tuna.tsinghua.edu.cn/debian-security bullseye-security main contrib non-free
+deb [arch=arm64,armhf] https://mirrors.ustc.edu.cn/debian/ bullseye main contrib non-free
+deb [arch=arm64,armhf] https://mirrors.ustc.edu.cn/debian/ bullseye-updates main contrib non-free
+deb [arch=arm64,armhf] https://mirrors.ustc.edu.cn/debian/ bullseye-backports main contrib non-free
+deb [arch=arm64,armhf] https://mirrors.ustc.edu.cn/debian-security bullseye-security main contrib non-free
 EOF
 
 cat > /etc/apt/sources.list.d/armbian.list <<EOF
-deb [arch=arm64,armhf] https://mirrors.tuna.tsinghua.edu.cn/armbian/ bullseye main bullseye-utils bullseye-desktop
+deb [arch=arm64,armhf] https://mirrors.ustc.edu.cn/armbian/ bullseye main bullseye-utils bullseye-desktop
 EOF
 
 sed -i 's/ENABLED=true/#ENABLED=true/' $mount_point/etc/default/armbian-zram-config
