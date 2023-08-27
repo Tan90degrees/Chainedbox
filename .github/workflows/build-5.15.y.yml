@@ -20,11 +20,11 @@ on:
 
   push:
 
-    branches: [ master ]
+    branches: [ main ]
 
   pull_request:
 
-    branches: [ master ]
+    branches: [ main ]
 
   # 允许您从“操作”选项卡手动运行此工作流
 
@@ -88,7 +88,7 @@ jobs:
 
   build:
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     if: github.event.repository.owner.id == github.event.sender.id
 
@@ -96,7 +96,7 @@ jobs:
 
     - name: Checkout
 
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: 初始化环境
 
@@ -152,7 +152,7 @@ jobs:
 
         sudo -E apt-get -qq update
 
-        sudo -E apt-get -qq install $(curl -fsSL git.io/depends-ubuntu-2004)
+        sudo -E apt-get -qq install git
 
         sudo -E apt-get -qq autoremove --purge
 
@@ -172,7 +172,7 @@ jobs:
 
         git clone --depth 1 https://github.com/armbian/build.git build
 
-        #sudo cp -r ./config ./build
+        sudo cp -r ./config ./build
 
         #sudo cp -r ./userpatches ./build
 
@@ -200,7 +200,7 @@ jobs:
 
         sudo chmod +x compile.sh
 
-        sudo ./compile.sh  BOARD=${{ env.ARMBIAN_BOARD }} BRANCH=${{ env.ARMBIAN_BRANCH }}  RELEASE=${{ env.ARMBIAN_RELEASE }}  BUILD_MINIMAL=no BUILD_DESKTOP=no KERNEL_ONLY=no KERNEL_CONFIGURE=no COMPRESS_OUTPUTIMAGE=sha,img
+        ./compile.sh  BOARD=${{ env.ARMBIAN_BOARD }} BRANCH=${{ env.ARMBIAN_BRANCH }}  RELEASE=${{ env.ARMBIAN_RELEASE }}  BUILD_MINIMAL=no BUILD_DESKTOP=no KERNEL_CONFIGURE=no COMPRESS_OUTPUTIMAGE=sha,img
 
         [ -e ./.config ] && cp -f ./.config ./output/images/.config
 
@@ -236,7 +236,7 @@ jobs:
 
     - name: 上传 Armbian 镜像到 Actions
 
-      uses: kittaakos/upload-artifact-as-is@master
+      uses: actions/upload-artifact@v3
 
       if: steps.build.outputs.status == 'success'
 
