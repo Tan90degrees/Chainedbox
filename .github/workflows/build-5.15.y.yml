@@ -34,37 +34,36 @@ on:
 
     inputs:
 
-      ssh:
+      armbianBoard:
 
-        description: 'SSH 连接'
-
-        required: false
-
-        default: 'false'
-
-      armbianboard:
-
-        description: '设置机型： [ l1pro / chainedbox /rock64 ]'
+        description: '设置机型: [ l1pro / chainedbox / rock64 ]'
 
         required: false
 
         default: 'l1pro'
 
-      armbianbranch:
+      armbianBranch:
 
-        description: '设置版本分支： [ current / edge ]'
+        description: '设置版本分支: [ current / edge ]'
 
         required: false
 
         default: 'current'
 
-      armbianrelease:
+      armbianRelease:
 
-        description: '设置发布系统版本： [ buster / bullseye ]'
+        description: '设置发布系统版本: [ buster / bullseye ]'
 
         required: false
 
         default: 'bullseye'
+      
+      cpuFrequece:
+        description: '设置CPU最高频率: [ 1296mhz / 1392mhz / 1512mhz ]'
+
+        required: false
+
+        default: '1296mhz'
 
   schedule:
 
@@ -106,9 +105,9 @@ jobs:
 
       run: |
 
-        if [ -n "${{ github.event.inputs.armbianboard }}" ]; then
+        if [ -n "${{ github.event.inputs.armbianBoard }}" ]; then
 
-           ARMBIAN_BOARD=${{ github.event.inputs.armbianboard }}
+           ARMBIAN_BOARD=${{ github.event.inputs.armbianBoard }}
 
         else
 
@@ -120,9 +119,9 @@ jobs:
 
         
 
-        if [ -n "${{ github.event.inputs.armbianbranch }}" ]; then
+        if [ -n "${{ github.event.inputs.armbianBranch }}" ]; then
 
-           ARMBIAN_BRANCH=${{ github.event.inputs.armbianbranch }}
+           ARMBIAN_BRANCH=${{ github.event.inputs.armbianBranch }}
 
         else
 
@@ -134,9 +133,9 @@ jobs:
 
         
 
-        if [ -n "${{ github.event.inputs.armbianrelease }}" ]; then
+        if [ -n "${{ github.event.inputs.armbianRelease }}" ]; then
 
-           ARMBIAN_RELEASE=${{ github.event.inputs.armbianrelease }}
+           ARMBIAN_RELEASE=${{ github.event.inputs.armbianRelease }}
 
         else
 
@@ -145,6 +144,18 @@ jobs:
         fi
 
         echo "ARMBIAN_RELEASE=${ARMBIAN_RELEASE}" >> $GITHUB_ENV
+
+        if [ -n "${{ github.event.inputs.cpuFrequece }}" ]; then
+
+           CPU_FREQUECE=${{ github.event.inputs.cpuFrequece }}
+
+        else
+
+           CPU_FREQUECE=1296mhz
+
+        fi
+
+        echo "CPU_FREQUECE=${CPU_FREQUECE}" >> $GITHUB_ENV
 
         
 
@@ -160,9 +171,9 @@ jobs:
 
         sudo timedatectl set-timezone "$TZ"
 
-        sudo mkdir -p /workdir
+        sed -i 's/xxxxmhz/${{ env.CPU_FREQUECE }}/g' ./config/boards/*
 
-        sudo chown $USER:$GROUPS /workdir
+        sed -i 's/xxxxmhz/${{ env.CPU_FREQUECE }}/g' ./config/bootenv/*
 
     - name: 下载源代码
 
@@ -175,20 +186,6 @@ jobs:
         sudo cp -r ./config ./build
 
         #sudo cp -r ./userpatches ./build
-
-    
-
-    - name: SSH连接到 Actions @ Ctrl+C 确定, Ctrl+D 退出
-
-      uses: P3TERX/ssh2actions@main
-
-      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
-
-      env:
-
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
     - name: 编译 Armbian for ${{ env.ARMBIAN_BOARD }}
 
@@ -222,7 +219,7 @@ jobs:
 
         sudo chmod +x ./rebuild-5.15.y.sh
 
-        sudo ./rebuild-5.15.y.sh
+        sudo ./rebuild-5.15.y.sh ${{ env.CPU_FREQUECE }}
 
         echo "镜像编辑完成"
 

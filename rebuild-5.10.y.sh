@@ -3,6 +3,7 @@ origin="Rock64"
 target="Chainedbox"
 WORK_DIR=$(pwd)
 echo "$WORK_DIR"
+cpuFrequece=$1
 mount_point="tmp"
 kernel=
 DTB=dtbs/5.15.y-bsp
@@ -64,7 +65,7 @@ sed -i '/^verbosity/cverbosity=7' $mount_point/boot/armbianEnv.txt && \
 sed -i '/rootfstype=ext4/a rootflags=rw' $mount_point/boot/armbianEnv.txt && \
 echo "extraargs=usbcore.autosuspend=-1" >> $mount_point/boot/armbianEnv.txt && \
 echo "extraboardargs=" >> $mount_point/boot/armbianEnv.txt && \
-echo "fdtfile=rk3328-l1pro-1512mhz.dtb" >> $mount_point/boot/armbianEnv.txt && \
+echo "fdtfile=rk3328-l1pro-$cpuFrequece.dtb" >> $mount_point/boot/armbianEnv.txt && \
 echo "usbstoragequirks=0x05e3:0x0612:u,0x1d6b:0x0003:u,0x05e3:0x0610:u" >> $mount_point/boot/armbianEnv.txt && \
 sed -i 's/0x9000000/0x39000000/' $mount_point/boot/boot.cmd && \
 sed -i 's#${prefix}dtb/${fdtfile}#${prefix}/${fdtfile}#' $mount_point/boot/boot.cmd
