@@ -52,7 +52,7 @@ on:
 
       armbianRelease:
 
-        description: '设置发布系统版本: [ buster / bullseye ]'
+        description: '设置发布系统版本: [ buster / bullseye / bookworm]'
 
         required: false
 
@@ -233,7 +233,7 @@ jobs:
 
     - name: 上传 Armbian 镜像到 Actions
 
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
 
       if: steps.build.outputs.status == 'success'
 
