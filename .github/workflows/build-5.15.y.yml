@@ -163,7 +163,7 @@ jobs:
 
         sudo -E apt-get -qq update
 
-        sudo -E apt-get -qq install git build-essential u-boot-tools
+        sudo -E apt-get -qq install git
 
         sudo -E apt-get -qq autoremove --purge
 
@@ -181,7 +181,7 @@ jobs:
 
       run: |
 
-        git clone --depth 1 https://github.com/armbian/build.git build
+        git clone --depth=1 --branch=v24.11 https://github.com/armbian/build.git build
 
         sudo cp -r ./config ./build
 
