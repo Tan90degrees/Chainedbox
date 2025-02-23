@@ -163,7 +163,7 @@ jobs:
 
         sudo -E apt-get -qq update
 
-        sudo -E apt-get -qq install git build-essential u-boot-tools
+        sudo -E apt-get -qq install git build-essential
 
         sudo -E apt-get -qq autoremove --purge
 
