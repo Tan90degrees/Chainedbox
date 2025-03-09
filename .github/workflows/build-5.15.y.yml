@@ -52,11 +52,11 @@ on:
 
       armbianRelease:
 
-        description: '设置发布系统版本: [ buster / bullseye / bookworm]'
+        description: '设置发布系统版本: [ noble ]'
 
         required: false
 
-        default: 'bullseye'
+        default: 'noble'
       
       cpuFrequece:
         description: '设置CPU最高频率: [ 1296mhz / 1392mhz / 1512mhz ]'
@@ -87,7 +87,7 @@ jobs:
 
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: 	ubuntu-24.04
 
     if: github.event.repository.owner.id == github.event.sender.id
 
@@ -139,7 +139,7 @@ jobs:
 
         else
 
-           ARMBIAN_RELEASE=bullseye
+           ARMBIAN_RELEASE=noble
 
         fi
 
@@ -157,17 +157,17 @@ jobs:
 
         echo "CPU_FREQUECE=${CPU_FREQUECE}" >> $GITHUB_ENV
 
-        
+        # sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        # sudo -E apt-get -qq update
 
-        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        # sudo -E apt-get -qq install git
 
-        sudo -E apt-get -qq update
+        # sudo -E apt-get -qq autoremove --purge
+ 
+        # sudo -E apt-get -qq clean
 
-        sudo -E apt-get -qq install git
-
-        sudo -E apt-get -qq autoremove --purge
-
-        sudo -E apt-get -qq clean
+        sudo apt update
+        sudo apt upgrade
 
         sudo timedatectl set-timezone "$TZ"
 
@@ -194,6 +194,8 @@ jobs:
       run: |
 
         cd build/
+
+        sed -i 's/ubuntu\:jammy/ubuntu\:noble/g' lib/functions/host/docker.sh
 
         sudo chmod +x compile.sh
 
