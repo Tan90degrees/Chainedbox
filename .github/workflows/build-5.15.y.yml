@@ -122,6 +122,33 @@ jobs:
           test -x build/compile.sh || chmod +x build/compile.sh
           echo "Armbian build ref: $(git -C build describe --tags --always)"
 
+      # Armbian builds arm64 rootfs in a Docker container on an amd64 host.
+      # binfmt_misc must be registered on the runner host before Docker starts:
+      # container-local update-binfmts cannot initialize the host kernel.
+      - name: Register QEMU for ARM64 chroot
+        uses: docker/setup-qemu-action@v4
+        with:
+          image: tonistiigi/binfmt:qemu-v10.0.4
+          platforms: arm64,arm
+          cache-image: false
+
+      - name: Verify ARM64 emulation before compiling
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -e /proc/sys/fs/binfmt_misc/qemu-aarch64 || {
+            echo "::error::qemu-aarch64 binfmt handler was not registered on the host"
+            exit 1
+          }
+          grep -q '^enabled' /proc/sys/fs/binfmt_misc/qemu-aarch64
+          grep -Eq '^flags:.*F' /proc/sys/fs/binfmt_misc/qemu-aarch64
+          arch="$(docker run --rm --platform linux/arm64 alpine:3.22 uname -m)"
+          test "$arch" = aarch64 || {
+            echo "::error::ARM64 QEMU smoke test failed: uname -m returned $arch"
+            exit 1
+          }
+          echo "ARM64 binfmt and real arm64 container execution verified."
+
       - name: Compile Armbian
         shell: bash
         run: |
@@ -135,6 +162,15 @@ jobs:
             BUILD_DESKTOP=no \
             KERNEL_CONFIGURE=no \
             COMPRESS_OUTPUTIMAGE=img
+
+      - name: Upload Armbian build logs when compilation fails
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: armbian-failure-logs-${{ github.run_number }}
+          path: build/output/logs/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Customize Chainedbox image and checksums
         shell: bash

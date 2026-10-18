@@ -30,6 +30,12 @@
 
 **GitHub-hosted runner 可能磁盘空间不足**：上游建议约 50 GB 可用磁盘，GitHub Actions 成功不代表真机可以启动。
 
+
+
+### ARM64 跨架构编译准备
+
+GitHub 托管的 Ubuntu x86_64 Runner 需要先为宿主机内核注册 QEMU `binfmt_misc`，才能运行 Armbian 在 Docker 中生成的 ARM64 根文件系统。工作流使用 [docker/setup-qemu-action](https://github.com/docker/setup-qemu-action)（固定 `tonistiigi/binfmt:qemu-v10.0.4`），并在编译前通过真实 ARM64 容器执行冒烟测试。修复目标为失败日志中的 `Failed to update binfmts` / `arm64: not supported on this machine/kernel`；不能由此保证后续内核编译和刷机测试一定成功。编译失败时会自动上传 `build/output/logs/`（若有），方便诊断。
+
 ## 本地构建
 
 在 Ubuntu 24.04 上安装 `device-tree-compiler`、`u-boot-tools`、`util-linux` 等依赖，并提供足够空间。克隆本仓库后在仓库根目录执行：
