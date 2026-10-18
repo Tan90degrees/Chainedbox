@@ -1,119 +1,97 @@
-#!/bin/bash
-origin="Rock64"
-target="Chainedbox"
-WORK_DIR=$(pwd)
-echo "$WORK_DIR"
-cpuFrequece=$1
-mount_point="tmp"
-DTB=dtbs/5.15.y-bsp
-IDB=loader/idbloader.bin
-UBOOT=loader/uboot.img
-TRUST=loader/trust.bin
+#!/usr/bin/env bash
+# Historical filename retained for compatibility; supports the pinned modern build.
+# Run as root on the host (not inside the Armbian build container).
+set -Eeuo pipefail
 
-echo -e "01.01 读取镜像"
-#设置镜像路径
-imgdir=./build/output/images/
-imgfile="$(ls ${imgdir}/*.img)"
-echo "找到镜像: $imgfile"
+cpu_frequency="${1:-1296mhz}"
+board="${2:-l1pro}"
+case "$cpu_frequency" in 1296mhz|1392mhz|1512mhz) ;; *) echo "Unsupported CPU frequency: $cpu_frequency" >&2; exit 2 ;; esac
+case "$board" in l1pro|chainedbox) ;; *) echo "Unsupported board: $board" >&2; exit 2 ;; esac
+if (( EUID != 0 )); then echo "Run this script as root (sudo)." >&2; exit 2; fi
 
-echo -e "01.02 识别镜像名称"
-#获取镜像名称
-imgname=`basename $imgfile`
-echo "镜像名称: $imgname"
-echo -e "完成"
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+image_dir="$repo_dir/build/output/images"
+dtb_dir="$repo_dir/dtbs/5.15.y-bsp"
+shopt -s nullglob
+images=( "$image_dir"/*.img )
+(( ${#images[@]} == 1 )) || { echo "Expected exactly one uncompressed .img in $image_dir" >&2; exit 1; }
+image="${images[0]}"
+dtb="$dtb_dir/rk3328-l1pro-${cpu_frequency}.dtb"
+[[ -s "$dtb" ]] || { echo "Device tree not found: $dtb" >&2; exit 1; }
+for bootloader in idbloader.bin uboot.img trust.bin; do
+  [[ -s "$repo_dir/loader/$bootloader" ]] || { echo "Missing loader/$bootloader" >&2; exit 1; }
+done
 
-echo -e "02.01 挂载镜像"
+mount_dir="$(mktemp -d "$repo_dir/.chainedbox-mount.XXXXXX")"
+loop_device=""
+cleanup() {
+  status=$?
+  trap - EXIT INT TERM
+  if mountpoint -q "$mount_dir"; then umount "$mount_dir" || status=1; fi
+  if [[ -n "$loop_device" ]]; then losetup -d "$loop_device" || status=1; fi
+  rmdir "$mount_dir" || status=1
+  exit "$status"
+}
+trap cleanup EXIT INT TERM
 
-umount -f tmp
-losetup -D
-echo "挂载镜像 ... "
-losetup -D
-losetup -f -P ${imgfile}
+loop_device="$(losetup --find --show --partscan "$image")"
+udevadm settle || true
+root_partition="${loop_device}p1"
+[[ -b "$root_partition" ]] || { echo "Missing expected root partition: $root_partition" >&2; exit 1; }
+mount "$root_partition" "$mount_dir"
+[[ -s "$mount_dir/boot/armbianEnv.txt" ]] || { echo "Armbian /boot/armbianEnv.txt not found" >&2; exit 1; }
+[[ -s "$mount_dir/boot/boot.scr" ]] || { echo "Armbian /boot/boot.scr not found" >&2; exit 1; }
 
-BLK_DEV=$(losetup | grep "$imgname" | head -n 1 | gawk '{print $1}')
-echo "挂载镜像成功 位置："${BLK_DEV}""
+set_boot_env() {
+  local key="$1" value="$2" file="$mount_dir/boot/armbianEnv.txt"
+  if grep -q "^${key}=" "$file"; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$file"
+  fi
+}
+# Keep the current upstream boot script and its dtb/${fdtfile} convention.
+install -Dm644 "$dtb" "$mount_dir/boot/dtb/rockchip/$(basename "$dtb")"
+set_boot_env verbosity 7
+set_boot_env fdtfile "rockchip/$(basename "$dtb")"
+set_boot_env extraargs "usbcore.autosuspend=-1"
+set_boot_env usbstoragequirks "0x2537:0x1066:u,0x2537:0x1068:u"
 
-echo "设置卷标"
-e2label ${BLK_DEV}p1 ROOTFS
-tune2fs ${BLK_DEV}p1 -L ROOTFS
+install -Dm755 "$repo_dir/l1pro/pwm-fan.pl" "$mount_dir/usr/bin/pwm-fan.pl"
+install -Dm644 "$repo_dir/l1pro/pwm-fan.service" "$mount_dir/etc/systemd/system/pwm-fan.service"
+install -Dm755 "$repo_dir/l1pro/install-docker.sh" "$mount_dir/root/install-docker.sh"
+install -Dm755 "$repo_dir/l1pro/install-omv.sh" "$mount_dir/root/install-omv.sh"
+mkdir -p "$mount_dir/etc/systemd/system/multi-user.target.wants"
+ln -sfn ../pwm-fan.service "$mount_dir/etc/systemd/system/multi-user.target.wants/pwm-fan.service"
+rm -f "$mount_dir/etc/systemd/system/getty.target.wants/serial-getty@ttyS2.service"
+printf '%s\n' "$board" > "$mount_dir/etc/hostname"
+ln -sfn /usr/share/zoneinfo/Asia/Shanghai "$mount_dir/etc/localtime"
 
-lsblk -l
-mkdir -p ${WORK_DIR}/tmp
-mount ${BLK_DEV}p1 ${WORK_DIR}/$mount_point
-echo "挂载镜像根目录到 ${WORK_DIR}/$mount_point "
-
-echo -e "完成"
-
-echo -e "03.01 复制文件"
-echo "复制文件"
-cp -v ${WORK_DIR}/$DTB/*.dtb $mount_point/boot/
-cp -v ${WORK_DIR}/l1pro/install-docker.sh $mount_point/root/
-cp -v ${WORK_DIR}/l1pro/install-omv.sh $mount_point/root/
-cp -v ${WORK_DIR}/l1pro/pwm-fan.service $mount_point/etc/systemd/system/
-cp -v ${WORK_DIR}/l1pro/pwm-fan.pl $mount_point/usr/bin/ && chmod 700 $mount_point/usr/bin/pwm-fan.pl
-
-echo -e "完成"
-
-echo -e "04.01 修改引导分区相关配置"
-
-
-echo "修改引导分区相关配置 ... "
-cd ${WORK_DIR}
-
-sed -i '/^verbosity/cverbosity=7' $mount_point/boot/armbianEnv.txt && \
-sed -i '/rootfstype=ext4/a rootflags=rw' $mount_point/boot/armbianEnv.txt && \
-echo "extraargs=usbcore.autosuspend=-1" >> $mount_point/boot/armbianEnv.txt && \
-echo "extraboardargs=" >> $mount_point/boot/armbianEnv.txt && \
-echo "fdtfile=rk3328-l1pro-${cpuFrequece}.dtb" >> $mount_point/boot/armbianEnv.txt && \
-echo "usbstoragequirks=0x05e3:0x0612:u,0x1d6b:0x0003:u,0x05e3:0x0610:u" >> $mount_point/boot/armbianEnv.txt && \
-sed -i 's/0x9000000/0x39000000/' $mount_point/boot/boot.cmd && \
-sed -i 's#${prefix}dtb/${fdtfile}#${prefix}/${fdtfile}#' $mount_point/boot/boot.cmd
-mkimage -C none -T script -d $mount_point/boot/boot.cmd $mount_point/boot/boot.scr
-
-# patch rootfs
-echo "patch rootfs"
-
-sed -i 's/ENABLED=true/#ENABLED=true/' $mount_point/etc/default/armbian-zram-config
-sed -i 's/ENABLED=true/#ENABLED=true/' $mount_point/etc/default/armbian-ramlog
-rm -f $mount_point/etc/systemd/system/getty.target.wants/serial-getty\@ttyS2.service
-ln -sf /usr/share/zoneinfo/Asia/Shanghai $mount_point/etc/localtime
-sed -i 's/Rock 64/chainedbox/' $mount_point/etc/armbian-image-release
-sed -i 's/rock64/chainedbox/' $mount_point/etc/armbian-image-release
-sed -i 's/rock64/chainedbox/' $mount_point/etc/armbian-release
-sed -i 's/Rock 64/chainedbox/' $mount_point/etc/armbian-release
-sed -i 's/rock64/Chainedbox/' $mount_point/etc/hostname
+# Avoid chroot on x86 runners: no QEMU/binary format dependency for systemctl.
 sync
+umount "$mount_dir"
+losetup -d "$loop_device"
+loop_device=""
 
-echo "进入 CHROOT 模式更新系统组件"
+# These offsets/loader binaries are specific to the RK3328 Chainedbox hardware.
+# Do not use losetup -D, which would detach unrelated loop devices.
+dd if="$repo_dir/loader/idbloader.bin" of="$image" seek=64 bs=512 conv=notrunc status=none
+dd if="$repo_dir/loader/uboot.img" of="$image" seek=16384 bs=512 conv=notrunc status=none
+dd if="$repo_dir/loader/trust.bin" of="$image" seek=24576 bs=512 conv=notrunc status=none
 
-chroot $mount_point <<EOF
-su
-systemctl enable pwm-fan.service
-apt-mark hold linux-dtb-legacy-rockchip64 linux-image-legacy-rockchip64 linux-dtb-current-rockchip64 linux-image-current-rockchip64 linux-dtb-edge-rockchip64 linux-image-edge-rockchip64
-#锁定内核文件，防止升级的时候 我家云 的专用内核被通用内核替换导致不开机
-
-ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
-	dpkg-reconfigure --frontend noninteractive tzdata
-exit
-EOF
-sync
-
-cd ${WORK_DIR}
-
-umount -f $mount_point
-
-echo "添加引导项： idb,uboot,trust"
-
-dd if=${IDB} of=${imgfile} seek=64 bs=512 conv=notrunc status=none && echo "idb patched: ${IDB}" || { echo "idb patch failed!"; exit 1; }
-dd if=${UBOOT} of=${imgfile} seek=16384 bs=512 conv=notrunc status=none && echo "uboot patched: ${UBOOT}" || { echo "u-boot patch failed!"; exit 1; }
-dd if=${TRUST} of=${imgfile} seek=24576 bs=512 conv=notrunc status=none && echo "trust patched: ${TRUST}" || { echo "trust patch failed!"; exit 1; }
-
-imgname_new=`basename $imgfile | sed "s/${origin}/${target}/"`
-echo "新文件名: $imgname_new"
-mv $imgfile ${imgdir}/${imgname_new}
-rm -rf ${tmpdir}
-
-losetup -D
-blkid
-echo "ok"
-
+name="$(basename "$image")"
+name="${name//Rock64/Chainedbox}"
+name="${name//L1pro/Chainedbox}"
+name="${name//L1Pro/Chainedbox}"
+if [[ "$name" == "$(basename "$image")" ]]; then
+  name="Chainedbox_${name}"
+fi
+new_image="$image_dir/$name"
+if [[ "$new_image" != "$image" ]]; then mv -- "$image" "$new_image"; fi
+gzip -1 -- "$new_image"
+(
+  cd "$image_dir"
+  sha256sum "$name.gz" > "$name.gz.sha256"
+  sha256sum -c "$name.gz.sha256"
+)
+echo "Image ready: $new_image.gz"
