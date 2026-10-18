@@ -1,305 +1,175 @@
-#===============================================
-
-# Description: 我家云 Armbian 编译脚本
-
-# File name: Chainedbox-build.yml
-
-# Lisence: MIT
-
-# Author: WingonWu
-
-# https://github.com/WingonWu/Chainedbox-build
-
-#===============================================
-
-name: Build Armbian For Chainedbox 5.15.y
+name: Build Chainedbox Armbian (stable)
 
 on:
-
-  # 在推送或拉取请求事件上触发工作流，但仅适用于主分支
-
   push:
-
-    branches: [ main ]
-
+    branches: [main]
+    paths:
+      - ".github/workflows/build-5.15.y.yml"
+      - "config/**"
+      - "dtbs/**"
+      - "loader/**"
+      - "l1pro/**"
+      - "rebuild-5.15.y.sh"
   pull_request:
-
-    branches: [ main ]
-
-  # 允许您从“操作”选项卡手动运行此工作流
-
-  repository_dispatch:
-
+    branches: [main]
   workflow_dispatch:
-
     inputs:
-
       armbianBoard:
-
-        description: '设置机型: [ l1pro / chainedbox / rock64 ]'
-
-        required: false
-
-        default: 'l1pro'
-
+        description: "Target board"
+        type: choice
+        required: true
+        default: l1pro
+        options: [l1pro, chainedbox]
       armbianBranch:
-
-        description: '设置版本分支: [ current / edge ]'
-
-        required: false
-
-        default: 'current'
-
+        description: "Kernel branch (current is the stable baseline)"
+        type: choice
+        required: true
+        default: current
+        options: [current, edge]
       armbianRelease:
-
-        description: '设置发布系统版本: [ noble ]'
-
-        required: false
-
-        default: 'noble'
-      
-      cpuFrequece:
-        description: '设置CPU最高频率: [ 1296mhz / 1392mhz / 1512mhz ]'
-
-        required: false
-
-        default: '1296mhz'
-
+        description: "Userspace distribution"
+        type: choice
+        required: true
+        default: noble
+        options: [noble, trixie]
+      cpuFrequency:
+        description: "Device-tree CPU frequency"
+        type: choice
+        required: true
+        default: 1296mhz
+        options: [1296mhz, 1392mhz, 1512mhz]
+      publishRelease:
+        description: "Publish successful image to GitHub Releases"
+        type: boolean
+        required: true
+        default: false
   schedule:
+    - cron: "0 17 * * 0"
 
-    - cron: '0 17 * * 0'
+permissions:
+  contents: read
 
-env:
-
-  DELETE_RELEASE: true
-
-  DELETE_ARTIFACTS: true
-
-  KEEP_DAY: 30
-
-  KEEP_MININUM_RUNS: 0
-
-  KEEP_MININUM_RELEASE: 6
-
-  TZ: Asia/Shanghai
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  validate:
+    name: Validate configuration and scripts
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Validate repository assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for script in rebuild-5.15.y.sh rebuild-5.10.y.sh; do
+            bash -n "$script"
+          done
+          for board in l1pro chainedbox; do
+            test -s "config/boards/${board}.conf"
+          done
+          for freq in 1296mhz 1392mhz 1512mhz; do
+            test -s "dtbs/5.15.y-bsp/rk3328-l1pro-${freq}.dtb"
+          done
+          for part in idbloader.bin uboot.img trust.bin; do
+            test -s "loader/${part}"
+          done
+          echo "Repository build assets validated."
 
   build:
-
-    runs-on: 	ubuntu-24.04
-
-    if: github.event.repository.owner.id == github.event.sender.id
-
+    name: Build and package Armbian image
+    needs: validate
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    permissions:
+      contents: write
+    env:
+      ARMBIAN_BUILD_REF: v26.5.1
+      ARMBIAN_BOARD: ${{ inputs.armbianBoard || 'l1pro' }}
+      ARMBIAN_BRANCH: ${{ inputs.armbianBranch || 'current' }}
+      ARMBIAN_RELEASE: ${{ inputs.armbianRelease || 'noble' }}
+      CPU_FREQUENCY: ${{ inputs.cpuFrequency || '1296mhz' }}
+      DEBIAN_FRONTEND: noninteractive
     steps:
-
-    - name: Checkout
-
-      uses: actions/checkout@v3
-
-    - name: 初始化环境
-
-      env:
-
-        DEBIAN_FRONTEND: noninteractive
-
-      run: |
-
-        if [ -n "${{ github.event.inputs.armbianBoard }}" ]; then
-
-           ARMBIAN_BOARD=${{ github.event.inputs.armbianBoard }}
-
-        else
-
-           ARMBIAN_BOARD=l1pro
-
-        fi
-
-        echo "ARMBIAN_BOARD=${ARMBIAN_BOARD}" >> $GITHUB_ENV
-
-        
-
-        if [ -n "${{ github.event.inputs.armbianBranch }}" ]; then
-
-           ARMBIAN_BRANCH=${{ github.event.inputs.armbianBranch }}
-
-        else
-
-           ARMBIAN_BRANCH=current
-
-        fi
-
-        echo "ARMBIAN_BRANCH=${ARMBIAN_BRANCH}" >> $GITHUB_ENV
-
-        
-
-        if [ -n "${{ github.event.inputs.armbianRelease }}" ]; then
-
-           ARMBIAN_RELEASE=${{ github.event.inputs.armbianRelease }}
-
-        else
-
-           ARMBIAN_RELEASE=noble
-
-        fi
-
-        echo "ARMBIAN_RELEASE=${ARMBIAN_RELEASE}" >> $GITHUB_ENV
-
-        if [ -n "${{ github.event.inputs.cpuFrequece }}" ]; then
-
-           CPU_FREQUECE=${{ github.event.inputs.cpuFrequece }}
-
-        else
-
-           CPU_FREQUECE=1296mhz
-
-        fi
-
-        echo "CPU_FREQUECE=${CPU_FREQUECE}" >> $GITHUB_ENV
-
-        # sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
-        # sudo -E apt-get -qq update
-
-        # sudo -E apt-get -qq install git
-
-        # sudo -E apt-get -qq autoremove --purge
- 
-        # sudo -E apt-get -qq clean
-
-        sudo apt update
-        sudo apt upgrade
-
-        sudo timedatectl set-timezone "$TZ"
-
-        sed -i 's/xxxxmhz/${{ env.CPU_FREQUECE }}/g' ./config/boards/*
-
-        sed -i 's/xxxxmhz/${{ env.CPU_FREQUECE }}/g' ./config/bootenv/*
-
-    - name: 下载源代码
-
-      id: down
-
-      run: |
-
-        git clone --depth=1 --branch=v24.11 https://github.com/armbian/build.git build
-
-        sudo cp -r ./config ./build
-
-        #sudo cp -r ./userpatches ./build
-
-    - name: 编译 Armbian for ${{ env.ARMBIAN_BOARD }}
-
-      id: build
-
-      run: |
-
-        cd build/
-
-        sed -i 's/ubuntu\:jammy/ubuntu\:noble/g' lib/functions/host/docker.sh
-
-        sudo chmod +x compile.sh
-
-        ./compile.sh  BOARD=${{ env.ARMBIAN_BOARD }} BRANCH=${{ env.ARMBIAN_BRANCH }}  RELEASE=${{ env.ARMBIAN_RELEASE }}  BUILD_MINIMAL=no BUILD_DESKTOP=no KERNEL_CONFIGURE=no COMPRESS_OUTPUTIMAGE=sha,img
-
-        [ -e ./.config ] && cp -f ./.config ./output/images/.config
-
-        echo "::set-output name=status::success"
-
-    - name: 打包 Armbian [ ${{ env.ARMBIAN_BOARD }} ]
-
-      id: rebuild
-
-      if: steps.build.outputs.status == 'success'
-
-      run: |
-
-        # sudo chmod +x kernel.sh
-
-        # sudo ./kernel.sh
-
-        # 编辑镜像
-
-        sudo chmod +x ./rebuild-5.15.y.sh
-
-        sudo ./rebuild-5.15.y.sh ${{ env.CPU_FREQUECE }}
-
-        echo "镜像编辑完成"
-
-        cd ./build/output/images/ && sudo gzip *.img
-
-        echo "FILEPATH=$PWD" >> $GITHUB_ENV
-
-        echo "FILE_DATE=$(date +"%Y.%m.%d.%H%M")" >> $GITHUB_ENV
-
-        echo "::set-output name=status::success"
-
-    - name: 上传 Armbian 镜像到 Actions
-
-      uses: actions/upload-artifact@v4
-
-      if: steps.build.outputs.status == 'success'
-
-      with:
-
-        path: ${{ env.FILEPATH }}/
-
-    - name: 上传 Armbian 镜像到 Release
-
-      uses: softprops/action-gh-release@v1
-
-      if: steps.build.outputs.status == 'success'
-
-      env:
-
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      with:
-
-        tag_name: Armbian-trunk_Chainedbox_5.15.y_${{ env.FILE_DATE }}
-
-        files: ${{ env.FILEPATH }}/*
-
-        body: |
-
-            我家云 Armbian 固件
-
-            * 固件信息
-
-            默认用户名: root
-
-            默认密码: 1234
-
-    - name: 删除旧版本
-
-      uses: dev-drprasad/delete-older-releases@master
-
-      if: env.DELETE_RELEASE == 'true'
-
-      with:
-
-        keep_latest: ${{ env.KEEP_MININUM_RELEASE }}
-
-        delete_tags: true
-
-      env:
-
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: 删除旧的工作流运行和工件
-
-      uses: Mattraks/delete-workflow-runs@main
-
-      if: env.DELETE_ARTIFACTS == 'true'
-
-      with:
-
-        token: ${{ secrets.GITHUB_TOKEN }}
-
-        repository: ${{ github.repository }}
-
-        retain_days: ${{ env.KEEP_DAY }}
-
-        keep_minimum_runs: ${{ env.KEEP_MININUM_RUNS }}
-
-          
-
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Prepare Ubuntu 24.04 build host
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Hosted runners are disk-constrained; leave system packages intact.
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends git ca-certificates util-linux u-boot-tools e2fsprogs
+          df -h .
+          free -h
+
+      - name: Fetch pinned stable Armbian framework
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$ARMBIAN_BUILD_REF" https://github.com/armbian/build.git build
+          cp config/boards/l1pro.conf config/boards/chainedbox.conf build/config/boards/
+          test -x build/compile.sh || chmod +x build/compile.sh
+          echo "Armbian build ref: $(git -C build describe --tags --always)"
+
+      - name: Compile Armbian
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd build
+          ./compile.sh build \
+            BOARD="$ARMBIAN_BOARD" \
+            BRANCH="$ARMBIAN_BRANCH" \
+            RELEASE="$ARMBIAN_RELEASE" \
+            BUILD_MINIMAL=no \
+            BUILD_DESKTOP=no \
+            KERNEL_CONFIGURE=no \
+            COMPRESS_OUTPUTIMAGE=img
+
+      - name: Customize Chainedbox image and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo bash ./rebuild-5.15.y.sh "$CPU_FREQUENCY" "$ARMBIAN_BOARD"
+          cd build/output/images
+          shopt -s nullglob
+          images=( *.img.gz )
+          (( ${#images[@]} == 1 )) || { echo "::error::Expected exactly one .img.gz image"; exit 1; }
+          sha256sum -c "${images[0]}.sha256"
+          echo "BUILD_DATE=$(date -u +%Y%m%d-%H%M%S)" >> "$GITHUB_ENV"
+
+      - name: Upload built image
+        uses: actions/upload-artifact@v7
+        with:
+          name: armbian-${{ env.ARMBIAN_BUILD_REF }}-${{ env.ARMBIAN_BOARD }}-${{ env.CPU_FREQUENCY }}-${{ github.run_number }}
+          path: |
+            build/output/images/*.img.gz
+            build/output/images/*.sha256
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Publish GitHub Release (manual opt-in)
+        if: github.event_name == 'workflow_dispatch' && inputs.publishRelease == true
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: chainedbox-${{ env.ARMBIAN_BUILD_REF }}-${{ env.ARMBIAN_BOARD }}-${{ env.BUILD_DATE }}-${{ github.run_number }}
+          name: Chainedbox Armbian ${{ env.ARMBIAN_BUILD_REF }} (${{ env.ARMBIAN_BOARD }})
+          files: |
+            build/output/images/*.img.gz
+            build/output/images/*.sha256
+          fail_on_unmatched_files: true
+          make_latest: false
+          body: |
+            Built from pinned Armbian framework ${{ env.ARMBIAN_BUILD_REF }}.
+            Board: ${{ env.ARMBIAN_BOARD }}; kernel branch: ${{ env.ARMBIAN_BRANCH }}; OS: ${{ env.ARMBIAN_RELEASE }}; DTB frequency: ${{ env.CPU_FREQUENCY }}.
+            Warning: RK3328 board-specific DTBs and bootloader are preserved from this repository; hardware boot and fan behavior must be tested before production use.
