@@ -21,7 +21,7 @@ on:
         default: l1pro
         options: [l1pro, chainedbox]
       armbianBranch:
-        description: "Kernel branch (current is the tested baseline)"
+        description: "Kernel branch (current is the stable baseline)"
         type: choice
         required: true
         default: current
@@ -66,7 +66,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash -n rebuild-5.15.y.sh rebuild-5.10.y.sh
+          for script in rebuild-5.15.y.sh rebuild-5.10.y.sh; do
+            bash -n "$script"
+          done
           for board in l1pro chainedbox; do
             test -s "config/boards/${board}.conf"
           done
@@ -124,7 +126,14 @@ jobs:
         run: |
           set -euo pipefail
           cd build
-          ./compile.sh build             BOARD="$ARMBIAN_BOARD"             BRANCH="$ARMBIAN_BRANCH"             RELEASE="$ARMBIAN_RELEASE"             BUILD_MINIMAL=no             BUILD_DESKTOP=no             KERNEL_CONFIGURE=no             COMPRESS_OUTPUTIMAGE=img
+          ./compile.sh build \
+            BOARD="$ARMBIAN_BOARD" \
+            BRANCH="$ARMBIAN_BRANCH" \
+            RELEASE="$ARMBIAN_RELEASE" \
+            BUILD_MINIMAL=no \
+            BUILD_DESKTOP=no \
+            KERNEL_CONFIGURE=no \
+            COMPRESS_OUTPUTIMAGE=img
 
       - name: Customize Chainedbox image and checksums
         shell: bash
