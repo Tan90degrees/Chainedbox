@@ -1,6 +1,6 @@
 # Chainedbox Armbian images
 
-RK3328 我家云 / L1 Pro 的 Armbian 构建脚本，支持 GitHub Actions 自动构建和手动发布。
+RK3328 我家云 / L1 Pro 的 Armbian 构建脚本，支持 GitHub Actions 自动构建和自动预发布。
 
 ## 构建版本
 
@@ -19,9 +19,11 @@ RK3328 我家云 / L1 Pro 的 Armbian 构建脚本，支持 GitHub Actions 自�
 - `armbianBranch`: `current`（推荐）或 `edge`。
 - `armbianRelease`: `noble` 或 `trixie`。
 - `cpuFrequency`: `1296mhz`（推荐）、`1392mhz` 或 `1512mhz`。
-- `publishRelease`: 默认关闭；仅手动运行并勾选后，成功构建的镜像才会发布到 GitHub Releases。
+- `publishRelease`: 默认关闭；手动运行时勾选后会创建 GitHub 预发布固件（pre-release）。
 
-推送到 `main` 或每周定时任务也会构建镜像，仅上传 Actions Artifacts（保留 14 天）；Pull Request 只执行快速配置/脚本检查，不自动发布。输出为 `.img.gz` 及对应的 `.sha256` 校验文件。
+`main` 分支推送成功构建后也会**自动发布预发布固件**，方便从 Releases 下载；需经过真机测试后才适合生产使用。
+
+推送到 `main` 会执行镜像构建并创建预发布；每周定时任务只上传 Actions Artifacts（保留 14 天）；Pull Request 只执行快速配置/脚本检查，不自动发布。输出为 `.img.gz` 及对应的 `.sha256` 校验文件。
 
 ## 本地构建
 

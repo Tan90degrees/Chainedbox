@@ -3,13 +3,6 @@ name: Build Chainedbox Armbian (stable)
 on:
   push:
     branches: [main]
-    paths:
-      - ".github/workflows/build-5.15.y.yml"
-      - "config/**"
-      - "dtbs/**"
-      - "loader/**"
-      - "l1pro/**"
-      - "rebuild-5.15.y.sh"
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -158,8 +151,8 @@ jobs:
           retention-days: 14
           compression-level: 0
 
-      - name: Publish GitHub Release (manual opt-in)
-        if: github.event_name == 'workflow_dispatch' && inputs.publishRelease == true
+      - name: Publish GitHub pre-release
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publishRelease == true)
         uses: softprops/action-gh-release@v3
         with:
           tag_name: chainedbox-${{ env.ARMBIAN_BUILD_REF }}-${{ env.ARMBIAN_BOARD }}-${{ env.BUILD_DATE }}-${{ github.run_number }}
@@ -168,8 +161,10 @@ jobs:
             build/output/images/*.img.gz
             build/output/images/*.sha256
           fail_on_unmatched_files: true
+          prerelease: true
           make_latest: false
           body: |
+            Pre-release image. Hardware boot validation has NOT been performed.
             Built from pinned Armbian framework ${{ env.ARMBIAN_BUILD_REF }}.
             Board: ${{ env.ARMBIAN_BOARD }}; kernel branch: ${{ env.ARMBIAN_BRANCH }}; OS: ${{ env.ARMBIAN_RELEASE }}; DTB frequency: ${{ env.CPU_FREQUENCY }}.
             Warning: RK3328 board-specific DTBs and bootloader are preserved from this repository; hardware boot and fan behavior must be tested before production use.
