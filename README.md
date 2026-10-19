@@ -39,7 +39,7 @@ GitHub 托管的 Ubuntu x86_64 Runner 需要先为宿主机内核注册 QEMU `bi
 
 ### Linux 6.18 IOMMU compatibility patch
 
-Armbian `v26.5.1` 的 `rockchip64-6.18` patch `media-0007-add-verisilicon-AV1-iommu-driver.patch` 中，VSI IOMMU 驱动的 `attach_dev` 回调仍是旧的两个参数，无法通过 Linux 6.18 的内核编译。仓库在 `patches/kernel/rockchip64-6.18/0001-vsi-iommu-attach-dev-api.patch` 中提供最小兼容补丁，将两个回调签名更新为 `(domain, dev, old_domain)`。Actions 会将它复制到 Armbian 的 `userpatches/kernel/archive/rockchip64-6.18/`，在上游补丁之上应用。该修改仅修复 API 签名，不改变驱动原有行为；内核完整编译和设备功能仍需验证。
+Armbian `v26.5.1` 的 `rockchip64-6.18` patch `media-0007-add-verisilicon-AV1-iommu-driver.patch` 中，VSI IOMMU 驱动的 `attach_dev` 回调仍是旧的两个参数，无法通过 Linux 6.18 的内核编译。仓库在 `patches/kernel/rockchip64-6.18/media-0008-vsi-iommu-attach-dev-api.patch` 中提供最小兼容补丁，将两个回调签名更新为 `(domain, dev, old_domain)`。Actions 会将它复制到 Armbian 的 `userpatches/kernel/archive/rockchip64-6.18/`，文件名为 `media-0008-...`，确保它排在创建驱动源码的 `media-0007-...` 之后应用。构建前还会从锁定版本上游补丁提取源文件，用 `patch --dry-run` 提前检查补丁是否能正确应用。此前命名为 `0001-...` 导致补丁在驱动创建前执行，从而报 `can't find file to patch`。该修改仅修复 API 签名，不改变驱动原有行为；内核完整编译和设备功能仍需验证。
 
 本地构建也需要在运行 `compile.sh` 前应用补丁：
 

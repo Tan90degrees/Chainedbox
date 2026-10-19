@@ -78,8 +78,8 @@ jobs:
           for part in idbloader.bin uboot.img trust.bin; do
             test -s "loader/${part}"
           done
-          test -s patches/kernel/rockchip64-6.18/0001-vsi-iommu-attach-dev-api.patch
-          grep -q "struct iommu_domain \*old" patches/kernel/rockchip64-6.18/0001-vsi-iommu-attach-dev-api.patch
+          test -s patches/kernel/rockchip64-6.18/media-0008-vsi-iommu-attach-dev-api.patch
+          grep -q "struct iommu_domain \*old" patches/kernel/rockchip64-6.18/media-0008-vsi-iommu-attach-dev-api.patch
           echo "Repository build assets validated."
 
   build:
@@ -123,7 +123,27 @@ jobs:
           cp config/boards/l1pro.conf config/boards/chainedbox.conf build/config/boards/
           # The pinned Armbian 6.18 rockchip64 patch adds vsi-iommu.c with the old
           # two-argument attach_dev callbacks. Overlay the minimal API fix on top.
-          test -s build/patch/kernel/archive/rockchip64-6.18/media-0007-add-verisilicon-AV1-iommu-driver.patch
+          upstream_patch="build/patch/kernel/archive/rockchip64-6.18/media-0007-add-verisilicon-AV1-iommu-driver.patch"
+          custom_patch="patches/kernel/rockchip64-6.18/media-0008-vsi-iommu-attach-dev-api.patch"
+          test -s "$upstream_patch"
+          test -s "$custom_patch"
+          # Ensure our patch sorts AFTER the upstream patch that creates vsi-iommu.c.
+          [[ "$(basename "$custom_patch")" > "$(basename "$upstream_patch")" ]] || {
+            echo "::error::VSI IOMMU patch must be applied after the upstream driver is created"
+            exit 1
+          }
+          # Preflight against the exact file introduced by the pinned Armbian patch.
+          # This catches both patch format errors and API drift before a long kernel build.
+          tmp="$(mktemp -d)"
+          mkdir -p "$tmp/drivers/iommu"
+          awk '
+            $0 == "+++ b/drivers/iommu/vsi-iommu.c" { in_file=1; next }
+            in_file && /^diff --git / { exit }
+            in_file && /^\+/ { print substr($0,2) }
+          ' "$upstream_patch" > "$tmp/drivers/iommu/vsi-iommu.c"
+          test -s "$tmp/drivers/iommu/vsi-iommu.c"
+          patch --batch --dry-run -p1 -d "$tmp" < "$custom_patch"
+          rm -rf "$tmp"
           mkdir -p build/userpatches/kernel/archive/rockchip64-6.18
           cp patches/kernel/rockchip64-6.18/*.patch build/userpatches/kernel/archive/rockchip64-6.18/
           ls -l build/userpatches/kernel/archive/rockchip64-6.18/
