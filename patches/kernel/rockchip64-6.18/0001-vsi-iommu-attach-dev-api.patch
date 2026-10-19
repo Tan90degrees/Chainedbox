@@ -1,0 +1,21 @@
+From: Chainedbox maintainers
+Subject: [PATCH] iommu: vsi: match Linux 6.18 attach_dev callback signature
+
+Armbian v26.5.1's rockchip64-6.18 patch adds the Verisilicon IOMMU
+driver using the pre-6.18 two-argument attach_dev callback. Linux 6.18
+expects attach_dev(domain, dev, old_domain). Keep the existing attach
+behavior while accepting the old-domain argument.
+
+diff --git a/drivers/iommu/vsi-iommu.c b/drivers/iommu/vsi-iommu.c
+--- a/drivers/iommu/vsi-iommu.c
++++ b/drivers/iommu/vsi-iommu.c
+@@ -493,3 +493,3 @@
+ static int vsi_iommu_identity_attach(struct iommu_domain *domain,
+-				     struct device *dev)
++				     struct device *dev, struct iommu_domain *old)
+ {
+@@ -568,3 +568,3 @@
+ static int vsi_iommu_attach_device(struct iommu_domain *domain,
+-				   struct device *dev)
++				   struct device *dev, struct iommu_domain *old)
+ {

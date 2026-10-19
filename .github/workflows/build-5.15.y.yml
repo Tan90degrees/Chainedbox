@@ -78,6 +78,8 @@ jobs:
           for part in idbloader.bin uboot.img trust.bin; do
             test -s "loader/${part}"
           done
+          test -s patches/kernel/rockchip64-6.18/0001-vsi-iommu-attach-dev-api.patch
+          grep -q "struct iommu_domain \*old" patches/kernel/rockchip64-6.18/0001-vsi-iommu-attach-dev-api.patch
           echo "Repository build assets validated."
 
   build:
@@ -119,6 +121,12 @@ jobs:
           set -euo pipefail
           git clone --depth 1 --branch "$ARMBIAN_BUILD_REF" https://github.com/armbian/build.git build
           cp config/boards/l1pro.conf config/boards/chainedbox.conf build/config/boards/
+          # The pinned Armbian 6.18 rockchip64 patch adds vsi-iommu.c with the old
+          # two-argument attach_dev callbacks. Overlay the minimal API fix on top.
+          test -s build/patch/kernel/archive/rockchip64-6.18/media-0007-add-verisilicon-AV1-iommu-driver.patch
+          mkdir -p build/userpatches/kernel/archive/rockchip64-6.18
+          cp patches/kernel/rockchip64-6.18/*.patch build/userpatches/kernel/archive/rockchip64-6.18/
+          ls -l build/userpatches/kernel/archive/rockchip64-6.18/
           test -x build/compile.sh || chmod +x build/compile.sh
           echo "Armbian build ref: $(git -C build describe --tags --always)"
 

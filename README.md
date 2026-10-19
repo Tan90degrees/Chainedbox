@@ -36,6 +36,18 @@
 
 GitHub 托管的 Ubuntu x86_64 Runner 需要先为宿主机内核注册 QEMU `binfmt_misc`，才能运行 Armbian 在 Docker 中生成的 ARM64 根文件系统。工作流使用 [docker/setup-qemu-action](https://github.com/docker/setup-qemu-action)（固定 `tonistiigi/binfmt:qemu-v10.0.4`），并在编译前通过真实 ARM64 容器执行冒烟测试。修复目标为失败日志中的 `Failed to update binfmts` / `arm64: not supported on this machine/kernel`；不能由此保证后续内核编译和刷机测试一定成功。编译失败时会自动上传 `build/output/logs/`（若有），方便诊断。
 
+
+### Linux 6.18 IOMMU compatibility patch
+
+Armbian `v26.5.1` 的 `rockchip64-6.18` patch `media-0007-add-verisilicon-AV1-iommu-driver.patch` 中，VSI IOMMU 驱动的 `attach_dev` 回调仍是旧的两个参数，无法通过 Linux 6.18 的内核编译。仓库在 `patches/kernel/rockchip64-6.18/0001-vsi-iommu-attach-dev-api.patch` 中提供最小兼容补丁，将两个回调签名更新为 `(domain, dev, old_domain)`。Actions 会将它复制到 Armbian 的 `userpatches/kernel/archive/rockchip64-6.18/`，在上游补丁之上应用。该修改仅修复 API 签名，不改变驱动原有行为；内核完整编译和设备功能仍需验证。
+
+本地构建也需要在运行 `compile.sh` 前应用补丁：
+
+```bash
+mkdir -p build/userpatches/kernel/archive/rockchip64-6.18
+cp patches/kernel/rockchip64-6.18/*.patch build/userpatches/kernel/archive/rockchip64-6.18/
+```
+
 ## 本地构建
 
 在 Ubuntu 24.04 上安装 `device-tree-compiler`、`u-boot-tools`、`util-linux` 等依赖，并提供足够空间。克隆本仓库后在仓库根目录执行：
